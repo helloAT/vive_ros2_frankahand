@@ -18,7 +18,7 @@ import time
 import os
 
 from base_server import Server
-# from gui import GuiManager
+from gui import GuiManager
 from models import ViveDynamicObjectMessage, ViveStaticObjectMessage, Configuration
 from triad_openvr import TriadOpenVR
 
@@ -536,7 +536,7 @@ def run_server(port: int, pipe: Pipe, logging_queue: Queue, config: Path, use_gu
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Vive tracker server')
-    parser.add_argument('--headless', default=True, help='if true will not run the gui')
+    parser.add_argument('--headless', default=False, help='if true will not run the gui')
     parser.add_argument('--port', default=8000, help='port to broadcast tracker data on')
     parser.add_argument('--config', default=f"~/vive_ros2/config.yml",
                         help='tracker configuration file')
@@ -557,11 +557,10 @@ if __name__ == "__main__":
         finally:
             p.kill()
     else:
-        print("Must start headless")
-        # p = Process(target=run_server, args=(args.port, server_conn, logger_queue, config, True,))
-        # p.start()
-        # try:
-        #     gui = GuiManager(gui_conn, logger_queue)
-        #     gui.start()
-        # finally:
-        #     p.kill()
+        p = Process(target=run_server, args=(args.port, server_conn, logger_queue, config, True,))
+        p.start()
+        try:
+            gui = GuiManager(gui_conn, logger_queue)
+            gui.start()
+        finally:
+            p.kill()
