@@ -3,8 +3,7 @@ import queue
 from pathlib import Path
 import math
 
-from dearpygui.simple import *
-from dearpygui.core import *
+import dearpygui.dearpygui as dpg
 
 from models import Configuration
 
@@ -27,8 +26,9 @@ class Page(ABC):
         self.gui_manager = gui_manager
 
     def show(self) -> bool:
-        if not does_item_exist(self.name):
-            add_window(self.name, autosize=True, on_close=self.clear)
+        if not dpg.does_item_exist(self.name):
+            with dpg.window(label=self.name, tag=self.name, autosize=True, on_close=self.clear):
+                pass
             return True
         return False
 
@@ -36,8 +36,8 @@ class Page(ABC):
     def update(self, system_state: dict):
         pass
 
-    def clear(self, sender, data):
-        delete_item(self.name)
+    def clear(self, sender, app_data):
+        dpg.delete_item(self.name)
 
 
 # render 3d scene from the top down (size of dot represent the scale on the z)
@@ -52,11 +52,17 @@ class Scene:
 
         self.center = [self.width / 2, self.height / 2]
         self.bottom_left = [self.width, self.height]
+        
+        # Create drawing handler ID for later use
+        self.drawing_id = None
 
     def add(self):
-        add_spacing()
-        add_drawing(self.name, width=self.width, height=self.height)
-        set_mouse_wheel_callback(self.mouse_wheel)
+        dpg.add_spacing()
+        with dpg.drawlist(width=self.width, height=self.height, tag=self.name):
+            pass
+        
+        with dpg.handler_registry():
+            dpg.add_mouse_wheel_handler(callback=self.mouse_wheel)
 
     def real_pose_from_pixels(self, point):
         return [(point[0] - self.center[0]) / self.scale_x, (point[1] - self.center[1]) / self.scale_y]
@@ -64,23 +70,36 @@ class Scene:
     def real_pose_to_pixels(self, point):
         return [(point[0] * self.scale_x + self.center[0]), (point[1] * self.scale_y + self.center[1])]
 
-    def mouse_wheel(self, sender, data):
-        if get_active_window() == get_item_parent(self.name):
-            self.scale_x, self.scale_y = self.scale_x + data[1] * 3, self.scale_y + data[1] * 3
-            self.z_scale += data[1] / 2
+    def mouse_wheel(self, sender, app_data):
+        if dpg.get_active_window() == dpg.get_item_parent(self.name):
+            delta = app_data
+            self.scale_x, self.scale_y = self.scale_x + delta * 3, self.scale_y + delta * 3
+            self.z_scale += delta / 2
 
     def draw_tracker(self, tracker_msg):
         point = self.real_pose_to_pixels([tracker_msg.x, tracker_msg.y])
         diameter = abs(tracker_msg.z) + self.z_offset * self.z_scale
-        draw_text(self.name, [point[0], point[1] - diameter - 15], f'{tracker_msg.device_name}', color=TRACKER_COLOR,
-                  size=13,
-                  tag=f"{tracker_msg.device_name}txt")
-        draw_circle(self.name, point, diameter, TRACKER_COLOR, fill=TRACKER_COLOR,
-                    tag=f"{tracker_msg.device_name}dot")
+        
+        text_tag = f"{tracker_msg.device_name}txt"
+        if dpg.does_item_exist(text_tag):
+            dpg.delete_item(text_tag)
+        
+        dot_tag = f"{tracker_msg.device_name}dot"
+        if dpg.does_item_exist(dot_tag):
+            dpg.delete_item(dot_tag)
+        
+        line_tag = f"{tracker_msg.device_name}line"
+        if dpg.does_item_exist(line_tag):
+            dpg.delete_item(line_tag)
+            
+        dpg.draw_text(self.name, [point[0], point[1] - diameter - 15], f'{tracker_msg.device_name}', 
+                     color=TRACKER_COLOR, size=13, tag=text_tag)
+        dpg.draw_circle(self.name, point, diameter, TRACKER_COLOR, fill=TRACKER_COLOR, tag=dot_tag)
+        
         _, _, yaw = tracker_msg.rotation_as_scipy_transform().as_euler("xyz")
         radius = 20 + diameter / 2
         pt2 = [point[0] - radius * math.cos(yaw), point[1] + radius * math.sin(yaw)]
-        draw_line(self.name, point, pt2, PURPLE, 3, tag=f"{tracker_msg.device_name}line")
+        dpg.draw_line(self.name, point, pt2, PURPLE, 3, tag=line_tag)
 
     def draw_reference(self, reference_msg):
         pass
@@ -88,30 +107,60 @@ class Scene:
     def draw_scales(self):
         tick_h = 5
         for x in range(0, self.width, 50):
-            draw_line(self.name, [x, self.height], [x, 0], GRIDLINES, 1, tag=f"{x}xgridline")
-            draw_line(self.name, [x, self.height], [x, self.height - tick_h], GREY, 1, tag=f"{x}xtick")
+            x_line_tag = f"{x}xgridline"
+            x_tick_tag = f"{x}xtick"
+            x_text_tag = f"{x}xticktext"
+            
+            if dpg.does_item_exist(x_line_tag):
+                dpg.delete_item(x_line_tag)
+            if dpg.does_item_exist(x_tick_tag):
+                dpg.delete_item(x_tick_tag)
+            if dpg.does_item_exist(x_text_tag):
+                dpg.delete_item(x_text_tag)
+                
+            dpg.draw_line(self.name, [x, self.height], [x, 0], GRIDLINES, 1, tag=x_line_tag)
+            dpg.draw_line(self.name, [x, self.height], [x, self.height - tick_h], GREY, 1, tag=x_tick_tag)
             x_real = self.real_pose_from_pixels([x, 0])[0]
-            draw_text(self.name, [x, self.height - tick_h - 20], f'{round(x_real, 1)}m', color=GREY, size=13,
-                      tag=f"{x}xticktext")
+            dpg.draw_text(self.name, [x, self.height - tick_h - 20], f'{round(x_real, 1)}m', color=GREY, size=13, tag=x_text_tag)
+            
         for y in range(0, self.height, 50):
-            draw_line(self.name, [0, y], [self.width, y], GRIDLINES, 1, tag=f"{y}ygridline")
-            draw_line(self.name, [0, y], [tick_h, y], GREY, 1, tag=f"{y}ytick")
+            y_line_tag = f"{y}ygridline"
+            y_tick_tag = f"{y}ytick"
+            y_text_tag = f"{y}yticktext"
+            
+            if dpg.does_item_exist(y_line_tag):
+                dpg.delete_item(y_line_tag)
+            if dpg.does_item_exist(y_tick_tag):
+                dpg.delete_item(y_tick_tag)
+            if dpg.does_item_exist(y_text_tag):
+                dpg.delete_item(y_text_tag)
+                
+            dpg.draw_line(self.name, [0, y], [self.width, y], GRIDLINES, 1, tag=y_line_tag)
+            dpg.draw_line(self.name, [0, y], [tick_h, y], GREY, 1, tag=y_tick_tag)
             y_real = self.real_pose_from_pixels([0, y])[1]
-            draw_text(self.name, [tick_h + 5, y - 2], f'{round(y_real, 1)}m', color=GREY, size=13,
-                      tag=f"{y}yticktext")
+            dpg.draw_text(self.name, [tick_h + 5, y - 2], f'{round(y_real, 1)}m', color=GREY, size=13, tag=y_text_tag)
 
     def add_axes(self):
         length = 40
-        draw_line("scene", self.center, [self.center[0], self.center[1] + length], GREEN, 3, tag="axis1")
-        draw_line("scene", self.center, [self.center[0] + length, self.center[1]], RED, 3, tag="axis2")
-        draw_circle("scene", self.center, 4, BLUE, fill=BLUE,
-                    tag="axis3")
+        if dpg.does_item_exist("axis1"):
+            dpg.delete_item("axis1")
+        if dpg.does_item_exist("axis2"):
+            dpg.delete_item("axis2")
+        if dpg.does_item_exist("axis3"):
+            dpg.delete_item("axis3")
+            
+        dpg.draw_line(self.name, self.center, [self.center[0], self.center[1] + length], GREEN, 3, tag="axis1")
+        dpg.draw_line(self.name, self.center, [self.center[0] + length, self.center[1]], RED, 3, tag="axis2")
+        dpg.draw_circle(self.name, self.center, 4, BLUE, fill=BLUE, tag="axis3")
 
     def draw(self, device_state):
-        clear_drawing("scene")
-        draw_rectangle("scene", [0, 0], self.bottom_left, BLACK, fill=BLACK, tag="backround")
+        # Clear the drawing canvas
+        dpg.delete_item(self.name, children_only=True)
+        
+        dpg.draw_rectangle(self.name, [0, 0], self.bottom_left, BLACK, fill=BLACK, tag="background")
         self.draw_scales()
         self.add_axes()
+        
         for device in device_state:
             if 'tracker' in device:
                 if device_state[device] is not None:
@@ -126,26 +175,30 @@ class DevicesPage(Page):
     def update(self, system_state):
         for device in system_state:
             serial = system_state[device].serial_num
+            device_tag = f"{device}:{serial}##name"
+            serial_tag = f"{serial}_txt"
+            
             if device not in self.devices_shown:
                 self.devices_shown.append(device)
-                add_input_text(f"{device}:{serial}##name", default_value=system_state[device].device_name,
-                               on_enter=True, callback=self.update_device_name,
-                               callback_data=(device, serial))
-                add_text(f"{serial}_txt", color=GREY)
+                with dpg.group(parent=self.name):
+                    dpg.add_input_text(label=device_tag, default_value=system_state[device].device_name,
+                                      tag=device_tag, on_enter=True, callback=self.update_device_name,
+                                      user_data=(device, serial))
+                    dpg.add_text(f"", tag=serial_tag, color=GREY)
             else:
-                set_value(f"{serial}_txt", f"x: {round(system_state[device].x, 2)}, "
-                                           f"y: {round(system_state[device].y, 2)}, "
-                                           f"z: {round(system_state[device].z, 2)}")
+                dpg.set_value(serial_tag, f"x: {round(system_state[device].x, 2)}, "
+                                       f"y: {round(system_state[device].y, 2)}, "
+                                       f"z: {round(system_state[device].z, 2)}")
 
-    def update_device_name(self, sender, data):
-        device, serial = data
-        new_name = get_value(f"{device}:{serial}##name")
+    def update_device_name(self, sender, app_data, user_data):
+        device, serial = user_data
+        new_name = dpg.get_value(f"{device}:{serial}##name")
         config = self.gui_manager.get_config()
         config.name_mappings[serial] = new_name
         self.gui_manager.update_config(config)
 
-    def clear(self, sender, data):
-        super(DevicesPage, self).clear(sender, data)
+    def clear(self, sender, app_data):
+        super(DevicesPage, self).clear(sender, app_data)
         self.devices_shown = []
 
 
@@ -160,27 +213,27 @@ class CalibrationPage(Page):
 
     def show(self):
         if super(CalibrationPage, self).show():
-            with window(self.name):
-                add_text("instructions##calibration", default_value="Please select a tracker for "
-                                                                    "each axis. Available trackers "
-                                                                    "are listed below for convenience:")
-                add_spacing()
-                add_text("trackers##calibration", default_value=str(self.trackers))
-                add_input_text(f"origin##calibration", default_value="", callback=self.update_origin)
-                add_input_text(f"+x##calibration", default_value="", callback=self.update_pos_x)
-                add_input_text(f"+y##calibration", default_value="", callback=self.update_pos_y)
-                add_button("Start calibration", callback=self.run_calibration)
+            with dpg.group(parent=self.name):
+                dpg.add_text("Please select a tracker for each axis. Available trackers are listed below for convenience:", tag="instructions##calibration")
+                dpg.add_spacing()
+                dpg.add_text(str(self.trackers), tag="trackers##calibration")
+                dpg.add_input_text(label="origin", tag="origin##calibration", default_value="", callback=self.update_origin)
+                dpg.add_input_text(label="+x", tag="+x##calibration", default_value="", callback=self.update_pos_x)
+                dpg.add_input_text(label="+y", tag="+y##calibration", default_value="", callback=self.update_pos_y)
+                dpg.add_button(label="Start calibration", callback=self.run_calibration)
+            return True
+        return False
 
-    def update_origin(self, sender, data):
-        self.origin_tracker = get_value("origin##calibration")
+    def update_origin(self, sender, app_data):
+        self.origin_tracker = app_data
 
-    def update_pos_x(self, sender, data):
-        self.pos_x_tracker = get_value("+x##calibration")
+    def update_pos_x(self, sender, app_data):
+        self.pos_x_tracker = app_data
 
-    def update_pos_y(self, sender, data):
-        self.pos_y_tracker = get_value("+y##calibration")
+    def update_pos_y(self, sender, app_data):
+        self.pos_y_tracker = app_data
 
-    def run_calibration(self, sender, data):
+    def run_calibration(self, sender, app_data):
         # verify valid input (trackers + unique)
         if self.origin_tracker in self.trackers and \
                 self.pos_y_tracker in self.trackers and \
@@ -190,7 +243,7 @@ class CalibrationPage(Page):
                 self.pos_x_tracker != self.pos_y_tracker:
             self.gui_manager.call_calibration(self.origin_tracker, self.pos_x_tracker, self.pos_y_tracker)
         else:
-            log_warning("Invalid tracker entered for calibration")
+            dpg.log_warning("Invalid tracker entered for calibration")
 
     def update(self, system_state: dict):
         trackers = []
@@ -199,10 +252,10 @@ class CalibrationPage(Page):
                 trackers.append(system_state[key].device_name)
         if len(trackers) > len(self.trackers):
             self.trackers = trackers
-            set_value("trackers##calibration", str(trackers))
+            dpg.set_value("trackers##calibration", str(trackers))
 
-    def clear(self, sender, data):
-        super(CalibrationPage, self).clear(sender, data)
+    def clear(self, sender, app_data):
+        super(CalibrationPage, self).clear(sender, app_data)
         self.trackers = []
 
 
@@ -214,20 +267,23 @@ class TestCalibrationPage:
 class ConfigurationPage(Page):
     def show(self):
         super(ConfigurationPage, self).show()
+        return True
 
     def update(self, system_state):
         config = self.gui_manager.get_config()
         if config is not None:
             config_dict = dict(self.gui_manager.get_config())
             for value in config_dict:
-                if not does_item_exist(f"{value}##config"):
-                    add_input_text(f"{value}##config", default_value=str(config_dict[value]),
-                                   on_enter=True, callback=self.update_config_entry,
-                                   callback_data=value)
+                tag = f"{value}##config"
+                if not dpg.does_item_exist(tag):
+                    with dpg.group(parent=self.name):
+                        dpg.add_input_text(label=value, tag=tag, default_value=str(config_dict[value]),
+                                         on_enter=True, callback=self.update_config_entry,
+                                         user_data=value)
                 else:
-                    set_value(f"{value}##config", str(config_dict[value]))
+                    dpg.set_value(tag, str(config_dict[value]))
 
-    def update_config_entry(self, sender, data):
+    def update_config_entry(self, sender, app_data, user_data):
         config = self.gui_manager.get_config()
 
 
@@ -237,53 +293,53 @@ class VisualizationPage:
         self.scene = Scene()
         self.devices_page = DevicesPage(name="Devices List", gui_manager=self.gui_manager)
         self.configuration_page = ConfigurationPage(name="Configuration", gui_manager=self.gui_manager)
-        self.calibrattion_page = CalibrationPage(name="Calibration", gui_manager=self.gui_manager)
+        self.calibration_page = CalibrationPage(name="Calibration", gui_manager=self.gui_manager)
 
     def show(self):
-        add_button("Save Configuration", callback=self.save_config)
-        add_same_line()
-        add_button("Refresh", callback=self.refresh)
-        add_same_line()
-        add_button("Calibrate", callback=self.calibrate)
-        add_same_line()
-        add_button("Test Calibration", callback=self.test_calibration)
-        add_same_line()
-        add_button("List Devices", callback=self.list_devices)
-        add_same_line()
-        add_button("Show Configuration", callback=self.show_configuration)
-        add_same_line()
-        add_button("Logs", callback=self.logs)
+        dpg.add_button(label="Save Configuration", callback=self.save_config)
+        dpg.add_same_line()
+        dpg.add_button(label="Refresh", callback=self.refresh)
+        dpg.add_same_line()
+        dpg.add_button(label="Calibrate", callback=self.calibrate)
+        dpg.add_same_line()
+        dpg.add_button(label="Test Calibration", callback=self.test_calibration)
+        dpg.add_same_line()
+        dpg.add_button(label="List Devices", callback=self.list_devices)
+        dpg.add_same_line()
+        dpg.add_button(label="Show Configuration", callback=self.show_configuration)
+        dpg.add_same_line()
+        dpg.add_button(label="Logs", callback=self.logs)
         self.scene.add()
 
-    def save_config(self, sender, data):
+    def save_config(self, sender, app_data):
         self.gui_manager.save_config()
 
-    def refresh(self, sender, data):
+    def refresh(self, sender, app_data):
         self.gui_manager.refresh_system()
 
-    def calibrate(self, sender, data):
-        self.calibrattion_page.show()
+    def calibrate(self, sender, app_data):
+        self.calibration_page.show()
 
-    def test_calibration(self, sender, data):
+    def test_calibration(self, sender, app_data):
         pass
 
-    def list_devices(self, sender, data):
+    def list_devices(self, sender, app_data):
         self.devices_page.show()
 
-    def show_configuration(self, sender, data):
+    def show_configuration(self, sender, app_data):
         self.configuration_page.show()
 
-    def logs(self, sender, data):
-        show_logger()
+    def logs(self, sender, app_data):
+        dpg.show_debug()
 
     def update(self, system_state: dict):
         self.scene.draw(system_state)
-        if does_item_exist("Devices List"):
+        if dpg.does_item_exist("Devices List"):
             self.devices_page.update(system_state)
-        if does_item_exist("Configuration"):
+        if dpg.does_item_exist("Configuration"):
             self.configuration_page.update(system_state)
-        if does_item_exist("Calibration"):
-            self.calibrattion_page.update(system_state)
+        if dpg.does_item_exist("Calibration"):
+            self.calibration_page.update(system_state)
 
     def clear(self):
         pass
@@ -294,22 +350,26 @@ class GuiManager:
         self._pipe = pipe
         self._logging_queue = logging_queue
         self._server_config: Configuration() = None
+        
+        # Initialize DearPyGUI
+        dpg.create_context()
+        
         self._page = VisualizationPage(self)
 
-    def on_render(self, sender, data):
+    def on_render(self):
         while self._logging_queue.qsize() > 0:
             try:
                 record = self._logging_queue.get_nowait()
                 message = record.getMessage()
                 logging_level = record.levelname
                 if logging_level == "DEBUG":
-                    log_debug(message)
+                    dpg.log_debug(message)
                 elif logging_level == "INFO":
-                    log_info(message)
+                    dpg.log_info(message)
                 elif logging_level == "WARNING":
-                    log_warning(message)
+                    dpg.log_warning(message)
                 else:
-                    log_error(message)
+                    dpg.log_error(message)
             except queue.Empty:
                 pass
 
@@ -341,8 +401,17 @@ class GuiManager:
 
     # Will Run the main gui
     def start(self):
-        with window("Vive Server", autosize=True, x_pos=20, y_pos=20):
+        dpg.create_viewport(title="Vive Server", width=1200, height=800)
+        
+        with dpg.window(label="Vive Server", tag="main_window", autosize=True, pos=(20, 20)):
             self._page.show()
 
-        set_render_callback(self.on_render)
-        start_dearpygui()
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+        
+        # Set up the render callback to run each frame
+        dpg.set_frame_callback(callback=self.on_render)
+        
+        # Start the GUI
+        dpg.start_dearpygui()
+        dpg.destroy_context()
