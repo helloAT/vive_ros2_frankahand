@@ -128,12 +128,12 @@ class ViveTrackerServer(Server):
                     controller_key = self.resolve_name_to_key(controller_name)
                     message = self.poll_controller(controller_key=controller_key)
                     messages["state"][controller_key] = message
-                    
-                    if message is not None:
-                        socket_message = construct_socket_msg(data=message)
-                        self.socket.sendto(socket_message.encode(), addr)
-                        if self.should_record:
-                            self.record(data=message)
+                
+                
+                socket_message = construct_socket_msg(data=message)
+                self.socket.sendto(socket_message.encode(), addr)
+                if self.should_record:
+                    self.record(data=message)
                 else:
                     self.logger.error(f"Tracker {tracker_name} with key {tracker_key} not found")
             except socket.timeout:
@@ -396,12 +396,14 @@ class ViveTrackerServer(Server):
 
             serial = device.get_serial()
             device_name = device_key if serial not in self.config.name_mappings else self.config.name_mappings[serial]
+            inputs = device.get_controller_inputs()
+            button = inputs.get("trigger",0.0)
             message = ViveDynamicObjectMessage(valid=True, x=x, y=y, z=z,
                                                qx=qx, qy=qy, qz=qz, qw=qw,
                                                vel_x=vel_x, vel_y=vel_y, vel_z=vel_z,
                                                p=p, q=q, r=r,
                                                device_name=device_name,
-                                               serial_num=serial)
+                                               serial_num=serial, button=button)
             return message
         except OSError as e:
             self.logger.error(f"OSError: {e}. Need to restart Vive Tracker Server")
