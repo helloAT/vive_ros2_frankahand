@@ -31,7 +31,7 @@ class ViveTrackerClient:
     def __init__(self, host: str, port: int, tracker_name: str,
                  time_out: float = 1, buffer_length: int = 1024,
                  should_record: bool = False,
-                 output_file_path: Path = Path(expanduser("~") + "/vive_ros2/data/RFS_Track.txt")):
+                 output_file_path: Path = Path("./data/RFS_Track.txt")):
         """
 
         Args:
@@ -82,6 +82,7 @@ class ViveTrackerClient:
             try:
                 _ = self.socket.sendto(self.tracker_name.encode(), (self.host, self.port))
                 data, addr = self.socket.recvfrom(self.buffer_length)  # buffer size is 1024 bytes
+                #self.logger.info("received",data.decode("utf-8"))
                 parsed_message, status = self.parse_message(data.decode())
                 if status:
                     self.update_latest_tracker_message(parsed_message=parsed_message)
@@ -166,7 +167,6 @@ class ViveTrackerClient:
         """
         Given Vive Tracker message in JSON format, load json into dictionary format,
         parse the tracker message using PyDantic
-
         Assign self.latest_vive_tracker_message as the parsed result
 
         Args:
@@ -175,9 +175,10 @@ class ViveTrackerClient:
         Returns:
             None
         """
+        #self.logger.info(parsed_message)
         try:
             d = json.loads(json.loads(parsed_message))
-            vive_tracker_message = ViveDynamicObjectMessage.parse_obj(d)
+            vive_tracker_message = ViveDynamicObjectMessage.model_validate(d)
             if vive_tracker_message.device_name == self.tracker_name:
                 self.latest_tracker_message = vive_tracker_message
             self.logger.debug(self.latest_tracker_message)
@@ -236,6 +237,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     logging.basicConfig(format='%(asctime)s|%(name)s|%(levelname)s|%(message)s',
                         datefmt="%H:%M:%S", level=logging.DEBUG if args.debug is True else logging.INFO)
-    HOST, PORT = "127.0.0.1", 8000
-    client = ViveTrackerClient(host=HOST, port=PORT, tracker_name="tracker_1", should_record=args.collect)
+    HOST, PORT = "192.168.1.103", 8000
+    client = ViveTrackerClient(host=HOST, port=PORT, tracker_name="controller_1", should_record=args.collect)
     client.update()
+
+
+

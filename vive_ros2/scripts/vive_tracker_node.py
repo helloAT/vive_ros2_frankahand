@@ -15,9 +15,9 @@ class ViveTrackerNode(Node):
 
     def __init__(self):
         super().__init__('vive_tracker_node')
-        self.declare_parameter('host_ip', '192.168.50.171')
+        self.declare_parameter('host_ip', '192.168.1.103')
         self.declare_parameter('host_port', 8000)
-        self.declare_parameter('tracker_name', 'T_1')
+        self.declare_parameter('tracker_name', 'controller_1')
         self.declare_parameter('topic', '')
         self.declare_parameter('link_name', 'odom')
         self.declare_parameter('child_link_name', 'tracker_link')
@@ -27,6 +27,7 @@ class ViveTrackerNode(Node):
 
         topic = self.topic.get_parameter_value().string_value
         topic_name = self.tracker_name.get_parameter_value().string_value + '/odom' if topic == "" else topic
+        print(f"{topic_name}")
         self.odom_pub = self.create_publisher(Odometry, topic_name,
             qos_profile=qos_profile_sensor_data)
 
