@@ -115,27 +115,25 @@ class ViveTrackerServer(Server):
             messages = {"state": {}}
             # Transmit data over the network
             try:
-                tracker_name, addr = self.socket.recvfrom(self.buffer_length)
-                tracker_name = tracker_name.decode()
-                tracker_key = self.resolve_name_to_key(tracker_name)
-                if tracker_key in self.get_tracker_keys():
-                    message = self.poll_tracker(tracker_key=tracker_key)
-                    messages["state"][tracker_key] = message
+                controller_name, addr = self.socket.recvfrom(self.buffer_length)
+                controller_name = controller_name.decode()
+                # tracker_key = self.cont(tracker_name)
+                # if tracker_key in self.get_tracker_keys():
+                #     message = self.poll_tracker(tracker_key=tracker_key)
+                #     messages["state"][tracker_key] = message
                     
-                controller_name = "controller_1"
-                controller_key = self.resolve_name_to_key(controller_name)
+                #controller_name = "controller_1"
+                #self.logger.error(f"{controller_name},{self.get_controller_keys()} ")
                 if controller_name in self.get_controller_keys():
                     controller_key = self.resolve_name_to_key(controller_name)
                     message = self.poll_controller(controller_key=controller_key)
                     messages["state"][controller_key] = message
-                
-                
-                socket_message = construct_socket_msg(data=message)
-                self.socket.sendto(socket_message.encode(), addr)
-                if self.should_record:
-                    self.record(data=message)
+                    socket_message = construct_socket_msg(data=message)
+                    self.socket.sendto(socket_message.encode(), addr)
+                    if self.should_record:
+                        self.record(data=message)
                 else:
-                    self.logger.error(f"Tracker {tracker_name} with key {tracker_key} not found")
+                    self.logger.error(f"Controller {controller_name} with key {controller_key} not found, {self.get_controller_keys()}")
             except socket.timeout:
                 self.logger.info("Did not receive connection from client")
             except Exception as e:
@@ -404,6 +402,7 @@ class ViveTrackerServer(Server):
                                                p=p, q=q, r=r,
                                                device_name=device_name,
                                                serial_num=serial, button=button)
+            self.logger.error(f"{message}")
             return message
         except OSError as e:
             self.logger.error(f"OSError: {e}. Need to restart Vive Tracker Server")
