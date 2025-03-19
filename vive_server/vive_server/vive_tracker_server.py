@@ -394,14 +394,20 @@ class ViveTrackerServer(Server):
 
             serial = device.get_serial()
             device_name = device_key if serial not in self.config.name_mappings else self.config.name_mappings[serial]
-            inputs = device.get_controller_inputs()
-            button = inputs.get("trigger",0.0)
+            if device_key.startswith("controller"):
+                inputs = device.get_controller_inputs()
+            else:
+                inputs = dict()
+            trigger = inputs.get("trigger",0.0)
+            grip_button = inputs.get("grip_button", 0)
+            menu_button = inputs.get("menu_button", 0)
             message = ViveDynamicObjectMessage(valid=True, x=x, y=y, z=z,
                                                qx=qx, qy=qy, qz=qz, qw=qw,
                                                vel_x=vel_x, vel_y=vel_y, vel_z=vel_z,
                                                p=p, q=q, r=r,
                                                device_name=device_name,
-                                               serial_num=serial, button=button)
+                                               serial_num=serial, 
+                                               trigger=trigger, grip_button=grip_button, menu_button=menu_button)
             self.logger.error(f"{message}")
             return message
         except OSError as e:
