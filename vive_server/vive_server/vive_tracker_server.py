@@ -133,7 +133,7 @@ class ViveTrackerServer(Server):
                     if self.should_record:
                         self.record(data=message)
                 else:
-                    self.logger.error(f"Controller {controller_name} with key {controller_key} not found, {self.get_controller_keys()}")
+                    self.logger.error(f"Controller {controller_name} not found, {self.get_controller_keys()}")
             except socket.timeout:
                 self.logger.info("Did not receive connection from client")
             except Exception as e:
