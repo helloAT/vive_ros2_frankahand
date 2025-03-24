@@ -46,7 +46,7 @@ class ViveDynamicObjectMessage(BaseModel):
                f"x: {round(self.x, 5)}, y: {round(self.y, 5)}, z: {round(self.z, 5)} | " \
                f"qx: {round(self.qx, 5)}, qy: {round(self.qy, 5)}, qz: {round(self.qz, 5)}, qw: {round(self.qz, 5)} | " \
                f"vel_x: {round(self.vel_x, 5)}, vel_y: {round(self.vel_y, 5)}, vel_z: {round(self.vel_z, 5)}" \
-               f"p: {round(self.p, 5)}, q: {round(self.q, 5)}, r: {round(self.r, 5)} | button: {self.trigger}"
+               f"p: {round(self.p, 5)}, q: {round(self.q, 5)}, r: {round(self.r, 5)} | trigger: {self.trigger}, grip_button: {self.grip_button}, menu_button: {self.menu_button}, "
 
     def __str__(self):
         return self.__repr__()

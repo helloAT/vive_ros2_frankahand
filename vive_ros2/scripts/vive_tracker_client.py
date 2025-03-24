@@ -109,7 +109,7 @@ class ViveTrackerClient:
             except Exception as e:
                 self.logger.debug(e)
 
-    def run_threaded(self, queue, kill):
+    def run_threaded(self, kill, queue=None):
         """
         Same as update but uses queue and listens to kil event
 
@@ -129,7 +129,8 @@ class ViveTrackerClient:
                 parsed_message, status = self.parse_message(data.decode())
                 if status:
                     self.update_latest_tracker_message(parsed_message=parsed_message)
-                    queue.put(self.latest_tracker_message)
+                    if queue:
+                        queue.put(self.latest_tracker_message)
                     if self.should_record:
                         if self.count % 10 == 0:
                             self.output_file.write(f'{self.latest_tracker_message.x},'
