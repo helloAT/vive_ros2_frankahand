@@ -11,6 +11,7 @@ import copy
 
 from vive_tracker_client import ViveTrackerClient
 from franka_state_interface import FrankaStateInterface
+from gripper_interfaces import FrankaGripperActionClient, wait_until_future_complete
 
 from queue import Queue
 
@@ -61,12 +62,23 @@ def main(args=None):
     node_handle = Node('teleoperation_node')
 
     fsi = FrankaStateInterface(node_handle)
+    franka_gripper_client = FrankaGripperActionClient(node_handle)
+
     # traj_publisher = TrajPublisher(fsi)
 
     spin_func = lambda _ : rclpy.spin(node_handle)
     spin_thread = Thread(target=spin_func, args=(0,))
     spin_thread.start()
     time.sleep(1) # sleep to allow spin thread to get some messages
+    
+    # gripper homing
+    future = franka_gripper_client.do_homing_async()
+    wait_until_future_complete(future)
+    goal_handle = future.result()
+    result_future = goal_handle.get_result_async()
+    wait_until_future_complete(result_future)
+    gripper_open = True
+
     panda = rtb.models.DH.Panda()
     panda.tool = SE3()
 
@@ -76,7 +88,7 @@ def main(args=None):
     current_joint_positions = copy.deepcopy(initial_joint_pos)
     joint_solutions = copy.deepcopy(current_joint_positions)
 
-    velocity_scale = 0.1 # m
+    velocity_scale = 0.2 # m
     rot_vel_scale = 0.3 # deg
 
     calibration_transformation = np.eye(3)
@@ -145,7 +157,25 @@ def main(args=None):
                     joint_solutions = sol.q
                     current_joint_positions = sol.q
                     fsi.publish_joints(joint_solutions.tolist())
-                    # traj_publisher.add_traj(list(intermediates))
+
+            if (controller_data.grip_button == 1) and (result_future.done() or result_future.cancelled()):
+                if gripper_open:
+                    print("closing gripper")
+                    future = franka_gripper_client.do_grasp_async(width=0.035, speed=0.2, epsilon=0.06)
+                    if future is not None:
+                        wait_until_future_complete(future)
+                        goal_handle = future.result()
+                        result_future = goal_handle.get_result_async()
+                        gripper_open = False
+                else:
+                    print("opening gripper")
+                    future = franka_gripper_client.do_move_async(width=0.08, speed=0.2)
+                    if future is not None:
+                        wait_until_future_complete(future)
+                        goal_handle = future.result()
+                        result_future = goal_handle.get_result_async()
+                        gripper_open = True
+
             time.sleep(0.02)
             
             last_pos = np.array([controller_data.x, controller_data.y, controller_data.z])
