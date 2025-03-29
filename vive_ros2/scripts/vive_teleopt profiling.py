@@ -14,6 +14,11 @@ from franka_state_interface import FrankaStateInterface
 
 from queue import Queue
 
+import cProfile, pstats, io
+from pstats import SortKey
+pr = cProfile.Profile()
+pr.enable()
+
 
 class ViveRecieverThread():
     def __init__(self, host, port, tracker_name):
@@ -37,19 +42,18 @@ class ViveRecieverThread():
 class TrajPublisher:
     def __init__(self, fsi):
         self.fsi = fsi
-        # self.queue = Queue(maxsize=40)
-        self.queue = Queue()
+        self.queue = Queue(maxsize=20)
         self.kill_thread = Event()
         self.traj_thread = Thread(target=self.publisher_thread)
 
         self.traj_thread.start()
 
     def publisher_thread(self):
-        while True:
-            joint_solutions = list(self.queue.get())
+        while rclpy.ok():
+            joint_solutions = self.queue.get()
             print(joint_solutions)
             self.fsi.publish_joints(joint_solutions)
-            time.sleep(0.02)
+            time.sleep(0.005)
     
     def add_traj(self, traj: list[list]):
         for joint_sol in traj:
@@ -76,8 +80,8 @@ def main(args=None):
     current_joint_positions = copy.deepcopy(initial_joint_pos)
     joint_solutions = copy.deepcopy(current_joint_positions)
 
-    velocity_scale = 0.1 # m
-    rot_vel_scale = 0.3 # deg
+    velocity_scale = 0.3 # m
+    rot_vel_scale = 0.5 # deg
 
     calibration_transformation = np.eye(3)
     
@@ -101,23 +105,16 @@ def main(args=None):
             controller_vel = np.array([controller_data.x, 
                                        controller_data.y, 
                                        controller_data.z]) - last_pos
-            # controller_vel = np.array([
-            #     controller_data.vel_x,
-            #     controller_data.vel_y,
-            #     controller_data.vel_z
-            # ])
 
-            controller_rot_vel = np.array([controller_data.p, 
-                                            controller_data.q, 
-                                            controller_data.r])
-            controller_rot_vel = np.clip(controller_rot_vel, a_max=1.6, a_min=-1.6)
-            controller_rot_vel[(-0.1<=controller_rot_vel) & (controller_rot_vel<=0.1)] = 0
-            
+            controller_rot_vel = [controller_data.p, 
+                                  controller_data.q, 
+                                  controller_data.r]
 
             if controller_data.menu_button == 1:
                 calibration_transformation = controller_data.rotation_as_scipy_transform().as_matrix()
                 print(calibration_transformation)
-            elif controller_data.trigger == 1:
+            # elif controller_data.trigger == 1:
+            elif True:
                 cartesian_increment =  np.matmul(calibration_transformation, np.array([
                     -controller_vel[0] * velocity_scale,
                     controller_vel[2] * velocity_scale, 
@@ -136,20 +133,24 @@ def main(args=None):
                 sol = panda.ikine_LM(desired_transform_se3, q0=current_joint_positions)
 
                 if sol.success:
-                    # n = 200
-                    # alphas = np.linspace(0, 1, n+2)
-                    # intermediates = np.outer(alphas, sol.q - current_joint_positions) + current_joint_positions
-                    # for q in qs_sample:
-                    #     fsi.publish_joints(list(q))
-                    # print(intermediates)
+                    print("controller_rot_vel", controller_rot_vel)
+                    print("controller_vel", controller_vel)
+                    print("current_joint_positions", current_joint_positions)
                     joint_solutions = sol.q
                     current_joint_positions = sol.q
-                    fsi.publish_joints(joint_solutions.tolist())
-                    # traj_publisher.add_traj(list(intermediates))
-            time.sleep(0.02)
+                    print("joint_solutions", joint_solutions)
+                    print("desired_transform_se3", desired_transform_se3)
+                    # traj_publisher.add_traj([joint_solutions.tolist()])
+                    # fsi.publish_joints(joint_solutions.tolist())
             
             last_pos = np.array([controller_data.x, controller_data.y, controller_data.z])
     finally:
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.TIME
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats(20)
+        print(s.getvalue())
         controller.kill()
         # tracker.kill()
 

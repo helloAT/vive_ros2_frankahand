@@ -1,13 +1,18 @@
-from spatialmath  import SE3
-from spatialmath.base import *
-import numpy as np
 
-import rclpy
-from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from scipy.spatial.transform import Rotation as R
 
+class FrankaStateSubscriber():
+    def __init__(self, node_handle):
+        self.subscription = node_handle.create_subscription(
+            JointState,
+            '/franka/measured_js',
+            self.listener_callback,
+            10)
+        self.subscription  # prevent unused variable warning
+        self.joint_positions = None
 
+    def listener_callback(self, msg):
+        self.joint_positions = msg.position
 
 class FrankaStateInterface():
     def __init__(self, node_handle):
