@@ -15,6 +15,7 @@ import json
 from typing import Tuple
 import argparse
 from pathlib import Path
+import time
 
 
 class ViveTrackerClient:
@@ -95,6 +96,7 @@ class ViveTrackerClient:
                                                    f'{self.latest_tracker_message.pitch},'
                                                    f'{self.latest_tracker_message.yaw}\n')
                     self.count += 1
+                    # time.sleep(0.5)
                 else:
                     self.logger.error(f"Failed to parse incoming message [{data.decode()}]")
             except socket.timeout:

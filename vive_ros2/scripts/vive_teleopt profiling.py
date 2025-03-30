@@ -11,9 +11,13 @@ import copy
 
 from vive_tracker_client import ViveTrackerClient
 from franka_state_interface import FrankaStateInterface
-from gripper_interfaces import FrankaGripperActionClient, wait_until_future_complete
 
 from queue import Queue
+
+import cProfile, pstats, io
+from pstats import SortKey
+pr = cProfile.Profile()
+pr.enable()
 
 
 class ViveRecieverThread():
@@ -38,19 +42,18 @@ class ViveRecieverThread():
 class TrajPublisher:
     def __init__(self, fsi):
         self.fsi = fsi
-        # self.queue = Queue(maxsize=40)
-        self.queue = Queue()
+        self.queue = Queue(maxsize=20)
         self.kill_thread = Event()
         self.traj_thread = Thread(target=self.publisher_thread)
 
         self.traj_thread.start()
 
     def publisher_thread(self):
-        while True:
-            joint_solutions = list(self.queue.get())
+        while rclpy.ok():
+            joint_solutions = self.queue.get()
             print(joint_solutions)
             self.fsi.publish_joints(joint_solutions)
-            time.sleep(0.02)
+            time.sleep(0.005)
     
     def add_traj(self, traj: list[list]):
         for joint_sol in traj:
@@ -62,23 +65,12 @@ def main(args=None):
     node_handle = Node('teleoperation_node')
 
     fsi = FrankaStateInterface(node_handle)
-    franka_gripper_client = FrankaGripperActionClient(node_handle)
-
     # traj_publisher = TrajPublisher(fsi)
 
     spin_func = lambda _ : rclpy.spin(node_handle)
     spin_thread = Thread(target=spin_func, args=(0,))
     spin_thread.start()
     time.sleep(1) # sleep to allow spin thread to get some messages
-    
-    # gripper homing
-    future = franka_gripper_client.do_homing_async()
-    wait_until_future_complete(future)
-    goal_handle = future.result()
-    result_future = goal_handle.get_result_async()
-    wait_until_future_complete(result_future)
-    gripper_open = True
-
     panda = rtb.models.DH.Panda()
     panda.tool = SE3()
 
@@ -88,8 +80,8 @@ def main(args=None):
     current_joint_positions = copy.deepcopy(initial_joint_pos)
     joint_solutions = copy.deepcopy(current_joint_positions)
 
-    velocity_scale = 0.4 # m
-    rot_vel_scale = 0.3 # deg
+    velocity_scale = 0.3 # m
+    rot_vel_scale = 0.5 # deg
 
     calibration_transformation = np.eye(3)
     
@@ -113,23 +105,16 @@ def main(args=None):
             controller_vel = np.array([controller_data.x, 
                                        controller_data.y, 
                                        controller_data.z]) - last_pos
-            # controller_vel = np.array([
-            #     controller_data.vel_x,
-            #     controller_data.vel_y,
-            #     controller_data.vel_z
-            # ])
 
-            controller_rot_vel = np.array([controller_data.p, 
-                                            controller_data.q, 
-                                            controller_data.r])
-            controller_rot_vel = np.clip(controller_rot_vel, a_max=1.6, a_min=-1.6)
-            controller_rot_vel[(-0.1<=controller_rot_vel) & (controller_rot_vel<=0.1)] = 0
-            
+            controller_rot_vel = [controller_data.p, 
+                                  controller_data.q, 
+                                  controller_data.r]
 
             if controller_data.menu_button == 1:
                 calibration_transformation = controller_data.rotation_as_scipy_transform().as_matrix()
                 print(calibration_transformation)
-            elif controller_data.trigger == 1:
+            # elif controller_data.trigger == 1:
+            elif True:
                 cartesian_increment =  np.matmul(calibration_transformation, np.array([
                     -controller_vel[0] * velocity_scale,
                     controller_vel[2] * velocity_scale, 
@@ -148,38 +133,24 @@ def main(args=None):
                 sol = panda.ikine_LM(desired_transform_se3, q0=current_joint_positions)
 
                 if sol.success:
-                    # n = 200
-                    # alphas = np.linspace(0, 1, n+2)
-                    # intermediates = np.outer(alphas, sol.q - current_joint_positions) + current_joint_positions
-                    # for q in qs_sample:
-                    #     fsi.publish_joints(list(q))
-                    # print(intermediates)
+                    print("controller_rot_vel", controller_rot_vel)
+                    print("controller_vel", controller_vel)
+                    print("current_joint_positions", current_joint_positions)
                     joint_solutions = sol.q
                     current_joint_positions = sol.q
-                    fsi.publish_joints(joint_solutions.tolist())
-
-            if (controller_data.grip_button == 1) and (result_future.done() or result_future.cancelled()):
-                if gripper_open:
-                    print("closing gripper")
-                    future = franka_gripper_client.do_grasp_async(width=0.035, speed=0.2, epsilon=0.06)
-                    if future is not None:
-                        wait_until_future_complete(future)
-                        goal_handle = future.result()
-                        result_future = goal_handle.get_result_async()
-                        gripper_open = False
-                else:
-                    print("opening gripper")
-                    future = franka_gripper_client.do_move_async(width=0.08, speed=0.2)
-                    if future is not None:
-                        wait_until_future_complete(future)
-                        goal_handle = future.result()
-                        result_future = goal_handle.get_result_async()
-                        gripper_open = True
-
-            time.sleep(0.02)
+                    print("joint_solutions", joint_solutions)
+                    print("desired_transform_se3", desired_transform_se3)
+                    # traj_publisher.add_traj([joint_solutions.tolist()])
+                    # fsi.publish_joints(joint_solutions.tolist())
             
             last_pos = np.array([controller_data.x, controller_data.y, controller_data.z])
     finally:
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.TIME
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats(20)
+        print(s.getvalue())
         controller.kill()
         # tracker.kill()
 
