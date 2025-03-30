@@ -388,7 +388,7 @@ class ViveTrackerServer(Server):
                                                                                                       [1, 0, 0],
                                                                                                       [0, 0, -1]])
             vel_x, vel_y, vel_z = rot_lv.apply([vel_x, vel_y, vel_z], inverse=True)
-            p, q, r = rot_lv.apply([p, q, r], inverse=True)
+            dev_p, dev_q, dev_r = rot_lv.apply([p, q, r], inverse=True)
 
             qx, qy, qz, qw = rot_lv.inv().as_quat()
 
