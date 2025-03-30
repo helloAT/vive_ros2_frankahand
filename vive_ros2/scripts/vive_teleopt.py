@@ -88,7 +88,7 @@ def main(args=None):
     current_joint_positions = copy.deepcopy(initial_joint_pos)
     joint_solutions = copy.deepcopy(current_joint_positions)
 
-    velocity_scale = 0.2 # m
+    velocity_scale = 0.4 # m
     rot_vel_scale = 0.3 # deg
 
     calibration_transformation = np.eye(3)
