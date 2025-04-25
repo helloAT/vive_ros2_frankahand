@@ -39,10 +39,18 @@ Found 1 Tracker
 ```
 
 ### Running the ROS2 Client
-In order to run the ROS2 node first run `sudo python3 setup.py install` to install the
-package with the object type for the messages transmitted by the server. You may also have
+In order to run vive_teleopt.py, first run `sudo python3 setup.py install` inside the `vive_ros2_frankahand/vive_server` directory
+to install the package with the object type for the messages transmitted by the server. You may also have
 to install some packages with pip such as pydantic if it is not already installed `pip3 install pydantic`.
 
-You can then run the node by running `ros2 run vive_ros2 vive_tracker_node.py --ros-args -p host_ip:=******** 
+Then `source install/setup.bash` inside the directory with the franka_gripper package.
+
+You can then run the vive_teleopt code using `python3 vive_teleopt.py` inside the `vive_ros2_frankahand/vive_ros2/scripts` directory.
+You may need to change the ip and port based on the output from the vive_server.
+
+<!-- You can then run the node by running `ros2 run vive_ros2 vive_tracker_node.py --ros-args -p host_ip:=******** 
 -p host_port:=****`. You should then be able to run `ros2 topic echo /tracker/odom` to verify 
-the node is working.
+the node is working. -->
+
+## References
+Most of the vive server and client code was graciously borrowed from the [vive_ros2](https://github.com/MPC-Berkeley/vive_ros2) repository by MPC-Berkley.
